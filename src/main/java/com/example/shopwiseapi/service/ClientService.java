@@ -29,17 +29,17 @@ public class ClientService {
     public ClientResponse findById(Long id) {
         return clientRepository.findById(id)
                 .map(ClientResponse::from)
-                .orElseThrow(() -> new EntityNotFoundException("Client introuvable avec l'id " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Client not found with id " + id));
     }
 
     @Transactional
     public ClientResponse create(ClientRequest request) {
         Client client = Client.builder()
-                .prenom(request.prenom())
-                .nom(request.nom())
+                .firstName(request.firstName())
+                .lastName(request.lastName())
                 .email(request.email())
-                .telephone(request.telephone())
-                .actif(resolveActif(request))
+                .phone(request.phone())
+                .active(resolveActive(request))
                 .build();
 
         return ClientResponse.from(clientRepository.save(client));
@@ -48,18 +48,18 @@ public class ClientService {
     @Transactional
     public ClientResponse update(Long id, ClientRequest request) {
         Client client = clientRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Client introuvable avec l'id " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Client not found with id " + id));
 
-        client.setPrenom(request.prenom());
-        client.setNom(request.nom());
+        client.setFirstName(request.firstName());
+        client.setLastName(request.lastName());
         client.setEmail(request.email());
-        client.setTelephone(request.telephone());
-        client.setActif(resolveActif(request));
+        client.setPhone(request.phone());
+        client.setActive(resolveActive(request));
 
         return ClientResponse.from(client);
     }
 
-    private Boolean resolveActif(ClientRequest request) {
-        return request.actif() != null ? request.actif() : true;
+    private Boolean resolveActive(ClientRequest request) {
+        return request.active() != null ? request.active() : true;
     }
 }

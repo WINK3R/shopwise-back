@@ -4,25 +4,25 @@ import java.time.LocalDateTime;
 
 public record ClientResponse(
         Long id,
-        String prenom,
-        String nom,
+        String firstName,
+        String lastName,
         String email,
-        String telephone,
-        Boolean actif,
-        LocalDateTime dateCreation,
-        LocalDateTime dateModification
+        String phone,
+        Boolean active,
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt
 ) {
 
     public static ClientResponse from(Client client) {
         return new ClientResponse(
                 client.getId(),
-                client.getPrenom(),
-                client.getNom(),
+                client.getFirstName(),
+                client.getLastName(),
                 client.getEmail(),
-                client.getTelephone(),
-                client.getActif(),
-                client.getDateCreation(),
-                client.getDateModification()
+                client.getPhone(),
+                client.getActive(),
+                client.getCreatedAt(),
+                client.getUpdatedAt()
         );
     }
 }
