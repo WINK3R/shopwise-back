@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class CustomerAccountControllerTest {
+class CustomerAccountControllerTest extends AbstractMerchantIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -37,18 +37,12 @@ class CustomerAccountControllerTest {
     @Autowired
     private LoyaltyAccountRepository loyaltyAccountRepository;
 
-    @BeforeEach
-    void setUp() {
-        customerAccountRepository.deleteAll();
-        loyaltyAccountRepository.deleteAll();
-        clientRepository.deleteAll();
-    }
-
     @Test
     void shouldCreateCustomerAccount() throws Exception {
         Client client = saveClient();
 
         mockMvc.perform(post("/api/clients/{clientId}/account", client.getId())
+                        .with(merchant()).with(csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -72,7 +66,7 @@ class CustomerAccountControllerTest {
                 .active(false)
                 .build());
 
-        mockMvc.perform(get("/api/clients/{clientId}/account", client.getId()))
+        mockMvc.perform(get("/api/clients/{clientId}/account", client.getId()).with(merchant()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.clientId").value(client.getId()))
                 .andExpect(jsonPath("$.active").value(false));
@@ -87,6 +81,7 @@ class CustomerAccountControllerTest {
                 .build());
 
         mockMvc.perform(post("/api/clients/{clientId}/account", client.getId())
+                        .with(merchant()).with(csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -99,13 +94,49 @@ class CustomerAccountControllerTest {
 
     @Test
     void shouldReturnNotFoundWhenCustomerAccountDoesNotExist() throws Exception {
-        mockMvc.perform(get("/api/clients/{clientId}/account", 999))
+        mockMvc.perform(get("/api/clients/{clientId}/account", 999).with(merchant()))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("Customer account not found for client 999"));
+                .andExpect(jsonPath("$.message").value("Client not found with id 999"));
+    }
+
+    @Test
+    void shouldLoginCustomerAndUpdateLastLogin() throws Exception {
+        Client client = saveClient();
+        customerAccountRepository.save(CustomerAccount.builder()
+                .client(client)
+                .passwordHash("hash-secret")
+                .build());
+
+        mockMvc.perform(post("/api/customer-accounts/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "marie.dupont@example.com",
+                                  "passwordHash": "hash-secret"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.clientId").value(client.getId()))
+                .andExpect(jsonPath("$.lastLogin", notNullValue()));
+    }
+
+    @Test
+    void shouldRejectInvalidCustomerCredentials() throws Exception {
+        mockMvc.perform(post("/api/customer-accounts/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "unknown@example.com",
+                                  "passwordHash": "wrong-hash"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid customer credentials"));
     }
 
     private Client saveClient() {
         return clientRepository.save(Client.builder()
+                .business(business)
                 .firstName("Marie")
                 .lastName("Dupont")
                 .email("marie.dupont@example.com")

@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: shopwise
+      POSTGRES_USER: shopwise
+      POSTGRES_PASSWORD: shopwise
+    ports:
+      - "5434:5432"
+    volumes:
+      - shopwise-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopwise -d shopwise"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  shopwise-postgres-data:

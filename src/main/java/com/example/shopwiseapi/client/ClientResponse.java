@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 public record ClientResponse(
         Long id,
+        Long businessId,
         String firstName,
         String lastName,
         String email,
@@ -16,6 +17,7 @@ public record ClientResponse(
     public static ClientResponse from(Client client) {
         return new ClientResponse(
                 client.getId(),
+                client.getBusiness() == null ? null : client.getBusiness().getId(),
                 client.getFirstName(),
                 client.getLastName(),
                 client.getEmail(),

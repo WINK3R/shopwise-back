@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class ClientControllerTest {
+class ClientControllerTest extends AbstractMerchantIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -37,29 +37,24 @@ class ClientControllerTest {
     @Autowired
     private LoyaltyAccountRepository loyaltyAccountRepository;
 
-    @BeforeEach
-    void setUp() {
-        customerAccountRepository.deleteAll();
-        loyaltyAccountRepository.deleteAll();
-        clientRepository.deleteAll();
-    }
-
     @Test
     void shouldFindAllClients() throws Exception {
         clientRepository.save(Client.builder()
+                .business(business)
                 .firstName("Marie")
                 .lastName("Dupont")
                 .email("marie.dupont@example.com")
                 .phone("0601020304")
                 .build());
         clientRepository.save(Client.builder()
+                .business(business)
                 .firstName("Paul")
                 .lastName("Martin")
                 .email("paul.martin@example.com")
                 .phone("0611223344")
                 .build());
 
-        mockMvc.perform(get("/api/clients"))
+        mockMvc.perform(get("/api/clients").param("businessId", business.getId().toString()).with(merchant()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].firstName").value("Marie"))
@@ -74,6 +69,7 @@ class ClientControllerTest {
     @Test
     void shouldFindClientById() throws Exception {
         Client client = clientRepository.save(Client.builder()
+                .business(business)
                 .firstName("Marie")
                 .lastName("Dupont")
                 .email("marie.dupont@example.com")
@@ -81,7 +77,7 @@ class ClientControllerTest {
                 .active(false)
                 .build());
 
-        mockMvc.perform(get("/api/clients/{id}", client.getId()))
+        mockMvc.perform(get("/api/clients/{id}", client.getId()).with(merchant()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(client.getId()))
                 .andExpect(jsonPath("$.firstName").value("Marie"))
@@ -95,7 +91,7 @@ class ClientControllerTest {
 
     @Test
     void shouldReturnNotFoundWhenFindingUnknownClient() throws Exception {
-        mockMvc.perform(get("/api/clients/{id}", 999))
+        mockMvc.perform(get("/api/clients/{id}", 999).with(merchant()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Client not found with id 999"));
     }
@@ -103,16 +99,18 @@ class ClientControllerTest {
     @Test
     void shouldCreateClient() throws Exception {
         mockMvc.perform(post("/api/clients")
+                        .with(merchant()).with(csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "businessId": %d,
                                   "firstName": "Marie",
                                   "lastName": "Dupont",
                                   "email": "marie.dupont@example.com",
                                   "phone": "0601020304",
                                   "active": true
                                 }
-                                """))
+                                """.formatted(business.getId())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id", notNullValue()))
                 .andExpect(jsonPath("$.firstName").value("Marie"))
@@ -127,21 +125,24 @@ class ClientControllerTest {
     @Test
     void shouldRejectInvalidClient() throws Exception {
         mockMvc.perform(post("/api/clients")
+                        .with(merchant()).with(csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "businessId": %d,
                                   "firstName": "",
                                   "lastName": "",
                                   "email": "invalid-email",
                                   "phone": ""
                                 }
-                                """))
+                                """.formatted(business.getId())))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void shouldUpdateClient() throws Exception {
         Client client = clientRepository.save(Client.builder()
+                .business(business)
                 .firstName("Marie")
                 .lastName("Dupont")
                 .email("marie.dupont@example.com")
@@ -149,16 +150,18 @@ class ClientControllerTest {
                 .build());
 
         mockMvc.perform(put("/api/clients/{id}", client.getId())
+                        .with(merchant()).with(csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "businessId": %d,
                                   "firstName": "Marie",
                                   "lastName": "Martin",
                                   "email": "marie.martin@example.com",
                                   "phone": "0611223344",
                                   "active": false
                                 }
-                                """))
+                                """.formatted(business.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(client.getId()))
                 .andExpect(jsonPath("$.firstName").value("Marie"))
@@ -173,16 +176,18 @@ class ClientControllerTest {
     @Test
     void shouldReturnNotFoundWhenUpdatingUnknownClient() throws Exception {
         mockMvc.perform(put("/api/clients/{id}", 999)
+                        .with(merchant()).with(csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "businessId": %d,
                                   "firstName": "Marie",
                                   "lastName": "Martin",
                                   "email": "marie.martin@example.com",
                                   "phone": "0611223344",
                                   "active": true
                                 }
-                                """))
+                                """.formatted(business.getId())))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Client not found with id 999"));
     }

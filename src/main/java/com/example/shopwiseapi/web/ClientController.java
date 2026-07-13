@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
@@ -25,8 +26,8 @@ public class ClientController {
     private final ClientService clientService;
 
     @GetMapping
-    public List<ClientResponse> findAll() {
-        return clientService.findAll();
+    public List<ClientResponse> findAll(@RequestParam Long businessId) {
+        return clientService.findAll(businessId);
     }
 
     @GetMapping("/{id}")

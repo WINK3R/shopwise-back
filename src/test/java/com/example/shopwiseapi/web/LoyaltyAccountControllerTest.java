@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class LoyaltyAccountControllerTest {
+class LoyaltyAccountControllerTest extends AbstractMerchantIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -37,18 +37,12 @@ class LoyaltyAccountControllerTest {
     @Autowired
     private CustomerAccountRepository customerAccountRepository;
 
-    @BeforeEach
-    void setUp() {
-        customerAccountRepository.deleteAll();
-        loyaltyAccountRepository.deleteAll();
-        clientRepository.deleteAll();
-    }
-
     @Test
     void shouldCreateLoyaltyAccount() throws Exception {
         Client client = saveClient();
 
         mockMvc.perform(post("/api/clients/{clientId}/loyalty", client.getId())
+                        .with(merchant()).with(csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -70,7 +64,7 @@ class LoyaltyAccountControllerTest {
                 .pointsBalance(10)
                 .build());
 
-        mockMvc.perform(get("/api/clients/{clientId}/loyalty", client.getId()))
+        mockMvc.perform(get("/api/clients/{clientId}/loyalty", client.getId()).with(merchant()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.clientId").value(client.getId()))
                 .andExpect(jsonPath("$.pointsBalance").value(10))
@@ -86,6 +80,7 @@ class LoyaltyAccountControllerTest {
                 .build());
 
         mockMvc.perform(post("/api/clients/{clientId}/loyalty/credit", client.getId())
+                        .with(merchant()).with(csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -105,6 +100,7 @@ class LoyaltyAccountControllerTest {
                 .build());
 
         mockMvc.perform(post("/api/clients/{clientId}/loyalty/debit", client.getId())
+                        .with(merchant()).with(csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -124,6 +120,7 @@ class LoyaltyAccountControllerTest {
                 .build());
 
         mockMvc.perform(post("/api/clients/{clientId}/loyalty/credit", client.getId())
+                        .with(merchant()).with(csrfToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -135,6 +132,7 @@ class LoyaltyAccountControllerTest {
 
     private Client saveClient() {
         return clientRepository.save(Client.builder()
+                .business(business)
                 .firstName("Marie")
                 .lastName("Dupont")
                 .email("marie.dupont@example.com")

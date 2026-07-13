@@ -3,6 +3,7 @@ package com.example.shopwiseapi.web;
 import com.example.shopwiseapi.client.LoyaltyAccountRequest;
 import com.example.shopwiseapi.client.LoyaltyAccountResponse;
 import com.example.shopwiseapi.client.LoyaltyPointsRequest;
+import com.example.shopwiseapi.client.LoyaltyTransactionResponse;
 import com.example.shopwiseapi.service.LoyaltyAccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/clients/{clientId}/loyalty")
@@ -50,5 +53,10 @@ public class LoyaltyAccountController {
             @Valid @RequestBody LoyaltyPointsRequest request
     ) {
         return loyaltyAccountService.debit(clientId, request);
+    }
+
+    @GetMapping("/transactions")
+    public List<LoyaltyTransactionResponse> findTransactions(@PathVariable Long clientId) {
+        return loyaltyAccountService.findTransactions(clientId);
     }
 }

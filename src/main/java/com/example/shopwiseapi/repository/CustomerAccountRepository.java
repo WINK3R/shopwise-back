@@ -10,4 +10,6 @@ public interface CustomerAccountRepository extends JpaRepository<CustomerAccount
     Optional<CustomerAccount> findByClientId(Long clientId);
 
     boolean existsByClientId(Long clientId);
+
+    Optional<CustomerAccount> findByClientEmail(String email);
 }

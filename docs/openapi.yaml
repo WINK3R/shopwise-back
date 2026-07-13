@@ -1,0 +1,1418 @@
+openapi: 3.0.3
+info:
+  title: ShopWise API
+  version: 2.0.0
+  description: |
+    Contrat de l'API backend ShopWise pour la gestion des commerces, clients,
+    prestations, rendez-vous, comptes clients et programmes de fidelite.
+
+    Les endpoints metier commercants sont proteges par authentification.
+    Les endpoints commercants utilisent une session serveur. Le navigateur doit
+    envoyer les cookies (`withCredentials: true`). Les requetes d'ecriture doivent
+    renvoyer le cookie `XSRF-TOKEN` dans l'en-tete `X-XSRF-TOKEN`.
+
+    En local, le bootstrap cree `owner@shopwise.local` avec le mot de passe
+    `Shopwise123!` lorsque la base ne contient encore aucun compte commercant.
+servers:
+  - url: http://localhost:8080
+    description: Environnement local
+tags:
+  - name: Merchant authentication
+  - name: Business team
+  - name: Businesses
+  - name: Merchants
+  - name: Services
+  - name: Clients
+  - name: Customer accounts
+  - name: Appointments
+  - name: Loyalty
+
+security:
+  - merchantSession: []
+
+paths:
+  /api/merchant-auth/login:
+    post:
+      tags: [Merchant authentication]
+      operationId: loginMerchant
+      summary: Ouvrir une session commercant
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantLoginRequest"
+      responses:
+        "200":
+          description: Session ouverte et cookie HttpOnly cree
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantSessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/merchant-auth/logout:
+    post:
+      tags: [Merchant authentication]
+      operationId: logoutMerchant
+      summary: Fermer la session commercant
+      responses:
+        "200":
+          description: Session fermee
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/merchant-auth/session:
+    get:
+      tags: [Merchant authentication]
+      operationId: getMerchantSession
+      summary: Restaurer la session commercant
+      responses:
+        "200":
+          description: Compte connecte et commerces accessibles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantSessionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/me/businesses:
+    get:
+      tags: [Merchant authentication]
+      operationId: listMyBusinesses
+      summary: Lister les commerces actifs accessibles au compte connecte
+      responses:
+        "200":
+          description: Rattachements actifs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BusinessMembershipResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/businesses/{businessId}/members:
+    parameters:
+      - $ref: "#/components/parameters/BusinessId"
+    get:
+      tags: [Business team]
+      operationId: listBusinessMembers
+      summary: Lister les membres d'un commerce
+      description: Reserve aux proprietaires du commerce.
+      responses:
+        "200":
+          description: Membres du commerce
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BusinessMembershipResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/businesses/{businessId}/members/{membershipId}:
+    parameters:
+      - $ref: "#/components/parameters/BusinessId"
+      - $ref: "#/components/parameters/MembershipId"
+    patch:
+      tags: [Business team]
+      operationId: updateBusinessMembership
+      summary: Modifier le role ou l'etat d'un rattachement
+      description: Le dernier proprietaire actif ne peut pas etre retire.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessMembershipUpdateRequest"
+      responses:
+        "200":
+          description: Rattachement mis a jour
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessMembershipResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/businesses/{businessId}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/BusinessId"
+    get:
+      tags: [Business team]
+      operationId: listMerchantInvitations
+      summary: Lister les invitations d'un commerce
+      responses:
+        "200":
+          description: Invitations du commerce
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MerchantInvitationResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Business team]
+      operationId: createMerchantInvitation
+      summary: Inviter un commercant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantInvitationRequest"
+      responses:
+        "201":
+          description: Invitation creee et envoyee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantInvitationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/merchant-invitations/{token}/accept:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Business team]
+      operationId: acceptMerchantInvitation
+      summary: Accepter une invitation
+      description: |
+        Pour une nouvelle personne, firstName, lastName et password sont obligatoires.
+        Si l'email appartient deja a un compte, ce compte doit etre connecte.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantInvitationAcceptRequest"
+      responses:
+        "200":
+          description: Invitation acceptee et session ouverte
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantSessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "410":
+          $ref: "#/components/responses/Gone"
+
+  /api/merchant-invitations/{id}/resend:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    post:
+      tags: [Business team]
+      operationId: resendMerchantInvitation
+      summary: Renvoyer une invitation avec un nouveau jeton
+      responses:
+        "200":
+          description: Invitation renvoyee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantInvitationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/merchant-invitations/{id}/revoke:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    post:
+      tags: [Business team]
+      operationId: revokeMerchantInvitation
+      summary: Revoquer une invitation en attente
+      responses:
+        "200":
+          description: Invitation revoquee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantInvitationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/businesses:
+    get:
+      tags: [Businesses]
+      operationId: listBusinesses
+      summary: Lister les commerces
+      responses:
+        "200":
+          description: Liste des commerces
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BusinessResponse"
+    post:
+      tags: [Businesses]
+      operationId: createBusiness
+      summary: Creer un commerce
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessRequest"
+      responses:
+        "201":
+          description: Commerce cree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/businesses/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [Businesses]
+      operationId: getBusiness
+      summary: Consulter un commerce
+      responses:
+        "200":
+          description: Commerce trouve
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Businesses]
+      operationId: updateBusiness
+      summary: Mettre a jour un commerce
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessRequest"
+      responses:
+        "200":
+          description: Commerce mis a jour
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/merchants:
+    get:
+      tags: [Merchants]
+      operationId: listMerchants
+      summary: Lister les commercants
+      deprecated: true
+      parameters:
+        - $ref: "#/components/parameters/BusinessIdQuery"
+      responses:
+        "200":
+          description: Liste des commercants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MerchantResponse"
+    post:
+      tags: [Merchants]
+      operationId: createMerchant
+      summary: Creer un commercant
+      deprecated: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantRequest"
+      responses:
+        "201":
+          description: Commercant cree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/merchants/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [Merchants]
+      operationId: getMerchant
+      summary: Consulter un commercant
+      deprecated: true
+      responses:
+        "200":
+          description: Commercant trouve
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Merchants]
+      operationId: updateMerchant
+      summary: Mettre a jour un commercant
+      deprecated: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantRequest"
+      responses:
+        "200":
+          description: Commercant mis a jour
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/services:
+    get:
+      tags: [Services]
+      operationId: listServices
+      summary: Lister les prestations
+      parameters:
+        - $ref: "#/components/parameters/BusinessIdQuery"
+      responses:
+        "200":
+          description: Liste des prestations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceResponse"
+    post:
+      tags: [Services]
+      operationId: createService
+      summary: Creer une prestation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceRequest"
+      responses:
+        "201":
+          description: Prestation creee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/services/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [Services]
+      operationId: getService
+      summary: Consulter une prestation
+      responses:
+        "200":
+          description: Prestation trouvee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Services]
+      operationId: updateService
+      summary: Mettre a jour une prestation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceRequest"
+      responses:
+        "200":
+          description: Prestation mise a jour
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/clients:
+    get:
+      tags: [Clients]
+      operationId: listClients
+      summary: Lister les clients
+      parameters:
+        - $ref: "#/components/parameters/BusinessIdQuery"
+      responses:
+        "200":
+          description: Liste des clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientResponse"
+    post:
+      tags: [Clients]
+      operationId: createClient
+      summary: Creer une fiche client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientRequest"
+      responses:
+        "201":
+          description: Client cree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/clients/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [Clients]
+      operationId: getClient
+      summary: Consulter une fiche client
+      responses:
+        "200":
+          description: Client trouve
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Clients]
+      operationId: updateClient
+      summary: Mettre a jour une fiche client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientRequest"
+      responses:
+        "200":
+          description: Client mis a jour
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/clients/{clientId}/account:
+    parameters:
+      - $ref: "#/components/parameters/ClientId"
+    get:
+      tags: [Customer accounts]
+      operationId: getCustomerAccount
+      summary: Consulter le compte d'un client
+      responses:
+        "200":
+          description: Compte client trouve
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAccountResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Customer accounts]
+      operationId: createCustomerAccount
+      summary: Creer le compte d'un client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerAccountRequest"
+      responses:
+        "201":
+          description: Compte client cree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAccountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/customer-accounts/login:
+    post:
+      tags: [Customer accounts]
+      operationId: loginCustomer
+      summary: Connecter un client
+      description: Verifie l'email et le hash fourni, puis met a jour la date de derniere connexion.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerLoginRequest"
+      responses:
+        "200":
+          description: Connexion acceptee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAccountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/appointments:
+    get:
+      tags: [Appointments]
+      operationId: listAppointments
+      summary: Lister et filtrer les rendez-vous
+      parameters:
+        - name: businessId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Id"
+        - name: date
+          in: query
+          required: false
+          description: Date locale du rendez-vous.
+          schema:
+            type: string
+            format: date
+            example: "2026-07-20"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AppointmentStatus"
+        - name: clientId
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/Id"
+      responses:
+        "200":
+          description: Liste filtree des rendez-vous, triee par date de debut
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AppointmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      tags: [Appointments]
+      operationId: createAppointment
+      summary: Creer un rendez-vous
+      description: L'heure de fin est calculee avec la duree de la prestation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentRequest"
+      responses:
+        "201":
+          description: Rendez-vous cree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/appointments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [Appointments]
+      operationId: getAppointment
+      summary: Consulter un rendez-vous
+      responses:
+        "200":
+          description: Rendez-vous trouve
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/appointments/{id}/status:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    patch:
+      tags: [Appointments]
+      operationId: updateAppointmentStatus
+      summary: Modifier le statut d'un rendez-vous
+      description: |
+        Un rendez-vous planifie peut etre marque HONORED ou CANCELED.
+        Le passage a HONORED credite automatiquement les points une seule fois.
+        Un rendez-vous termine ne peut pas passer vers un autre statut.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentStatusRequest"
+      responses:
+        "200":
+          description: Statut mis a jour
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/clients/{clientId}/loyalty:
+    parameters:
+      - $ref: "#/components/parameters/ClientId"
+    get:
+      tags: [Loyalty]
+      operationId: getLoyaltyAccount
+      summary: Consulter le solde de fidelite d'un client
+      responses:
+        "200":
+          description: Compte fidelite trouve
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyAccountResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Loyalty]
+      operationId: createLoyaltyAccount
+      summary: Creer le compte fidelite d'un client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoyaltyAccountRequest"
+      responses:
+        "201":
+          description: Compte fidelite cree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyAccountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/clients/{clientId}/loyalty/credit:
+    parameters:
+      - $ref: "#/components/parameters/ClientId"
+    post:
+      tags: [Loyalty]
+      operationId: creditLoyaltyPoints
+      summary: Crediter manuellement des points
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoyaltyPointsRequest"
+      responses:
+        "200":
+          description: Nouveau solde
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyAccountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/clients/{clientId}/loyalty/debit:
+    parameters:
+      - $ref: "#/components/parameters/ClientId"
+    post:
+      tags: [Loyalty]
+      operationId: debitLoyaltyPoints
+      summary: Debiter manuellement des points
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoyaltyPointsRequest"
+      responses:
+        "200":
+          description: Nouveau solde
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoyaltyAccountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/clients/{clientId}/loyalty/transactions:
+    parameters:
+      - $ref: "#/components/parameters/ClientId"
+    get:
+      tags: [Loyalty]
+      operationId: listLoyaltyTransactions
+      summary: Consulter l'historique de fidelite
+      responses:
+        "200":
+          description: Transactions de la plus recente a la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LoyaltyTransactionResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    merchantSession:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+      description: Session serveur du compte commercant.
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Id"
+    ClientId:
+      name: clientId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Id"
+    BusinessId:
+      name: businessId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Id"
+    MembershipId:
+      name: membershipId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Id"
+    BusinessIdQuery:
+      name: businessId
+      in: query
+      required: true
+      description: Commerce actif selectionne par le compte connecte.
+      schema:
+        $ref: "#/components/schemas/Id"
+
+  responses:
+    BadRequest:
+      description: Requete invalide ou operation metier interdite
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Session absente, identifiants invalides ou compte inactif
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Le compte connecte n'a pas acces au commerce ou a l'operation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Ressource introuvable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Une ressource equivalente existe deja
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Gone:
+      description: Le jeton d'invitation a expire
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    Id:
+      type: integer
+      format: int64
+      minimum: 1
+      example: 1
+
+    LocalDateTime:
+      type: string
+      description: Date et heure locale ISO-8601 sans fuseau horaire.
+      example: "2026-07-20T09:30:00"
+
+    AppointmentStatus:
+      type: string
+      enum: [SCHEDULED, HONORED, CANCELED]
+
+    TransactionType:
+      type: string
+      enum: [EARNED, REDEEMED, ADJUSTMENT]
+
+    MembershipRole:
+      type: string
+      enum: [OWNER, MANAGER, STAFF]
+
+    InvitationStatus:
+      type: string
+      enum: [PENDING, ACCEPTED, REVOKED, EXPIRED]
+
+    MerchantLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: marie@chez-marie.fr
+        password:
+          type: string
+          format: password
+          minLength: 1
+          writeOnly: true
+
+    MerchantAccountResponse:
+      type: object
+      required: [id, firstName, lastName, email, active]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        active:
+          type: boolean
+        lastLogin:
+          allOf:
+            - $ref: "#/components/schemas/LocalDateTime"
+          nullable: true
+
+    BusinessMembershipResponse:
+      type: object
+      required: [id, businessId, businessName, accountId, firstName, lastName, email, role, active]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        businessId:
+          $ref: "#/components/schemas/Id"
+        businessName:
+          type: string
+        accountId:
+          $ref: "#/components/schemas/Id"
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: "#/components/schemas/MembershipRole"
+        active:
+          type: boolean
+
+    MerchantSessionResponse:
+      type: object
+      required: [account, businesses]
+      properties:
+        account:
+          $ref: "#/components/schemas/MerchantAccountResponse"
+        businesses:
+          type: array
+          items:
+            $ref: "#/components/schemas/BusinessMembershipResponse"
+
+    BusinessMembershipUpdateRequest:
+      type: object
+      description: Au moins une des deux proprietes doit etre fournie.
+      properties:
+        role:
+          $ref: "#/components/schemas/MembershipRole"
+        active:
+          type: boolean
+
+    MerchantInvitationRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          $ref: "#/components/schemas/MembershipRole"
+
+    MerchantInvitationAcceptRequest:
+      type: object
+      description: Champs requis uniquement lorsqu'aucun compte n'existe encore pour l'email invite.
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        password:
+          type: string
+          format: password
+          minLength: 8
+          writeOnly: true
+
+    MerchantInvitationResponse:
+      type: object
+      required: [id, businessId, businessName, email, role, status, token, expiresAt, createdById, createdAt]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        businessId:
+          $ref: "#/components/schemas/Id"
+        businessName:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: "#/components/schemas/MembershipRole"
+        status:
+          $ref: "#/components/schemas/InvitationStatus"
+        token:
+          type: string
+          format: uuid
+          description: Jeton a transmettre manuellement au destinataire.
+        expiresAt:
+          $ref: "#/components/schemas/LocalDateTime"
+        createdById:
+          $ref: "#/components/schemas/Id"
+        createdAt:
+          $ref: "#/components/schemas/LocalDateTime"
+
+    BusinessRequest:
+      type: object
+      required: [name, email, phone]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: Chez Marie
+        email:
+          type: string
+          format: email
+          example: contact@chez-marie.fr
+        phone:
+          type: string
+          minLength: 1
+          example: "0102030405"
+        active:
+          type: boolean
+          default: true
+
+    BusinessResponse:
+      allOf:
+        - type: object
+          required: [id]
+          properties:
+            id:
+              $ref: "#/components/schemas/Id"
+        - $ref: "#/components/schemas/BusinessRequest"
+
+    MerchantRequest:
+      type: object
+      required: [businessId, firstName, lastName, email, role]
+      properties:
+        businessId:
+          $ref: "#/components/schemas/Id"
+        firstName:
+          type: string
+          minLength: 1
+          example: Marie
+        lastName:
+          type: string
+          minLength: 1
+          example: Dupont
+        email:
+          type: string
+          format: email
+          example: marie@chez-marie.fr
+        role:
+          type: string
+          minLength: 1
+          example: OWNER
+        active:
+          type: boolean
+          default: true
+
+    MerchantResponse:
+      allOf:
+        - type: object
+          required: [id]
+          properties:
+            id:
+              $ref: "#/components/schemas/Id"
+        - $ref: "#/components/schemas/MerchantRequest"
+
+    ServiceRequest:
+      type: object
+      required: [businessId, name, description, durationMinutes, loyaltyPoints]
+      properties:
+        businessId:
+          $ref: "#/components/schemas/Id"
+        name:
+          type: string
+          minLength: 1
+          example: Consultation
+        description:
+          type: string
+          minLength: 1
+          example: Conseil personnalise
+        durationMinutes:
+          type: integer
+          format: int32
+          minimum: 1
+          example: 45
+        loyaltyPoints:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 25
+        active:
+          type: boolean
+          default: true
+
+    ServiceResponse:
+      allOf:
+        - type: object
+          required: [id]
+          properties:
+            id:
+              $ref: "#/components/schemas/Id"
+        - $ref: "#/components/schemas/ServiceRequest"
+
+    ClientRequest:
+      type: object
+      required: [businessId, firstName, lastName, email, phone]
+      properties:
+        businessId:
+          $ref: "#/components/schemas/Id"
+        firstName:
+          type: string
+          minLength: 1
+          example: Alice
+        lastName:
+          type: string
+          minLength: 1
+          example: Martin
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+        phone:
+          type: string
+          minLength: 1
+          example: "0601020304"
+        active:
+          type: boolean
+          default: true
+
+    ClientResponse:
+      allOf:
+        - type: object
+          required: [id, createdAt, updatedAt]
+          properties:
+            id:
+              $ref: "#/components/schemas/Id"
+            createdAt:
+              $ref: "#/components/schemas/LocalDateTime"
+            updatedAt:
+              $ref: "#/components/schemas/LocalDateTime"
+        - $ref: "#/components/schemas/ClientRequest"
+
+    CustomerAccountRequest:
+      type: object
+      required: [passwordHash]
+      properties:
+        passwordHash:
+          type: string
+          minLength: 1
+          writeOnly: true
+          example: hash-secret
+        active:
+          type: boolean
+          default: true
+
+    CustomerLoginRequest:
+      type: object
+      required: [email, passwordHash]
+      properties:
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+        passwordHash:
+          type: string
+          minLength: 1
+          writeOnly: true
+          example: hash-secret
+
+    CustomerAccountResponse:
+      type: object
+      required: [id, clientId, active]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        clientId:
+          $ref: "#/components/schemas/Id"
+        active:
+          type: boolean
+        lastLogin:
+          allOf:
+            - $ref: "#/components/schemas/LocalDateTime"
+          nullable: true
+
+    AppointmentRequest:
+      type: object
+      required: [businessId, clientId, serviceId, startsAt]
+      properties:
+        businessId:
+          $ref: "#/components/schemas/Id"
+        clientId:
+          $ref: "#/components/schemas/Id"
+        serviceId:
+          $ref: "#/components/schemas/Id"
+        startsAt:
+          $ref: "#/components/schemas/LocalDateTime"
+        comment:
+          type: string
+          nullable: true
+          example: Premier rendez-vous
+
+    AppointmentStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+
+    AppointmentResponse:
+      type: object
+      required:
+        - id
+        - businessId
+        - clientId
+        - serviceId
+        - createdByAccountId
+        - startsAt
+        - endsAt
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        businessId:
+          $ref: "#/components/schemas/Id"
+        clientId:
+          $ref: "#/components/schemas/Id"
+        serviceId:
+          $ref: "#/components/schemas/Id"
+        createdByAccountId:
+          $ref: "#/components/schemas/Id"
+        startsAt:
+          $ref: "#/components/schemas/LocalDateTime"
+        endsAt:
+          $ref: "#/components/schemas/LocalDateTime"
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+        comment:
+          type: string
+          nullable: true
+        createdAt:
+          $ref: "#/components/schemas/LocalDateTime"
+        updatedAt:
+          $ref: "#/components/schemas/LocalDateTime"
+
+    LoyaltyAccountRequest:
+      type: object
+      properties:
+        pointsBalance:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+
+    LoyaltyPointsRequest:
+      type: object
+      required: [points]
+      properties:
+        points:
+          type: integer
+          format: int32
+          minimum: 1
+          example: 10
+
+    LoyaltyAccountResponse:
+      type: object
+      required: [id, clientId, pointsBalance, updatedAt]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        clientId:
+          $ref: "#/components/schemas/Id"
+        pointsBalance:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 25
+        updatedAt:
+          $ref: "#/components/schemas/LocalDateTime"
+
+    LoyaltyTransactionResponse:
+      type: object
+      required: [id, type, pointsDelta, reason, transactionDate]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        appointmentId:
+          allOf:
+            - $ref: "#/components/schemas/Id"
+          nullable: true
+        type:
+          $ref: "#/components/schemas/TransactionType"
+        pointsDelta:
+          type: integer
+          format: int32
+          description: Valeur positive pour un credit et negative pour un debit.
+          example: 25
+        reason:
+          type: string
+          example: Appointment honored
+        transactionDate:
+          $ref: "#/components/schemas/LocalDateTime"
+
+    ErrorResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Resource not found
