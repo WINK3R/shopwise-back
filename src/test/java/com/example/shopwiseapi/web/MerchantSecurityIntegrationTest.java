@@ -18,6 +18,7 @@ import com.example.shopwiseapi.repository.ClientRepository;
 import com.example.shopwiseapi.repository.LoyaltyAccountRepository;
 import com.example.shopwiseapi.repository.MerchantAccountRepository;
 import com.example.shopwiseapi.repository.MerchantInvitationRepository;
+import com.example.shopwiseapi.service.BusinessDefaultsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -74,6 +75,9 @@ class MerchantSecurityIntegrationTest extends AbstractMerchantIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private BusinessDefaultsService businessDefaultsService;
 
     @Test
     void shouldLoginRestoreSessionAndLogout() throws Exception {
@@ -150,6 +154,14 @@ class MerchantSecurityIntegrationTest extends AbstractMerchantIntegrationTest {
                         org.assertj.core.groups.Tuple.tuple("Retrait de commande", 30, 10),
                         org.assertj.core.groups.Tuple.tuple("Atelier d\u00e9couverte", 60, 40)
                 );
+    }
+
+    @Test
+    void shouldCreateDefaultServicesOnlyOncePerBusiness() {
+        businessDefaultsService.createDefaultServices(business);
+        businessDefaultsService.createDefaultServices(business);
+
+        assertThat(serviceRepository.findByBusinessIdOrderByName(business.getId())).hasSize(3);
     }
 
     @Test
