@@ -19,6 +19,7 @@ import com.example.shopwiseapi.repository.LoyaltyAccountRepository;
 import com.example.shopwiseapi.repository.MerchantAccountRepository;
 import com.example.shopwiseapi.repository.MerchantInvitationRepository;
 import com.example.shopwiseapi.service.BusinessDefaultsService;
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -38,6 +39,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -162,6 +164,167 @@ class MerchantSecurityIntegrationTest extends AbstractMerchantIntegrationTest {
         businessDefaultsService.createDefaultServices(business);
 
         assertThat(serviceRepository.findByBusinessIdOrderByName(business.getId())).hasSize(3);
+    }
+
+    @Test
+    void shouldManageBusinessAndCatalogVariants() throws Exception {
+        Service service = saveService(business);
+
+        mockMvc.perform(get("/api/businesses").with(merchant()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(business.getId()));
+        mockMvc.perform(get("/api/businesses/{id}", business.getId()).with(merchant()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/services")
+                        .param("businessId", business.getId().toString())
+                        .with(merchant()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/services/{id}", service.getId()).with(merchant()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/services/{id}", service.getId())
+                        .with(merchant()).with(csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(serviceJson(business.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(true));
+
+        Business secondBusiness = saveBusiness("Catalogue separe", "catalogue@separe.fr");
+        membershipRepository.save(BusinessMembership.builder()
+                .merchantAccount(merchantAccount)
+                .business(secondBusiness)
+                .role(MembershipRole.OWNER)
+                .build());
+        mockMvc.perform(put("/api/services/{id}", service.getId())
+                        .with(merchant()).with(csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(serviceJson(secondBusiness.getId())))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(put("/api/businesses/{id}", business.getId())
+                        .with(merchant()).with(csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name":"Commerce ferme",
+                                  "email":"closed@shopwise.test",
+                                  "phone":"0102030405",
+                                  "active":false
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+    }
+
+    @Test
+    void shouldManageLegacyMerchantsForBackwardCompatibility() throws Exception {
+        MvcResult creation = mockMvc.perform(post("/api/merchants")
+                        .with(merchant()).with(csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "businessId":%d,
+                                  "firstName":"Jean",
+                                  "lastName":"Martin",
+                                  "email":"jean@legacy.test",
+                                  "role":"STAFF"
+                                }
+                                """.formatted(business.getId())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.active").value(true))
+                .andReturn();
+        Number merchantId = JsonPath.read(creation.getResponse().getContentAsString(), "$.id");
+
+        mockMvc.perform(get("/api/merchants")
+                        .param("businessId", business.getId().toString())
+                        .with(merchant()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+        mockMvc.perform(get("/api/merchants/{id}", merchantId.longValue()).with(merchant()))
+                .andExpect(status().isOk());
+        mockMvc.perform(put("/api/merchants/{id}", merchantId.longValue())
+                        .with(merchant()).with(csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "businessId":%d,
+                                  "firstName":"Jean",
+                                  "lastName":"Martin",
+                                  "email":"jean@legacy.test",
+                                  "role":"STAFF",
+                                  "active":false
+                                }
+                                """.formatted(business.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+    }
+
+    @Test
+    void shouldHandleMembershipAndInvitationEdgeCases() throws Exception {
+        MerchantAccount secondOwner = saveAccount("second-owner@shopwise.test");
+        BusinessMembership secondOwnerMembership = membershipRepository.save(BusinessMembership.builder()
+                .merchantAccount(secondOwner)
+                .business(business)
+                .role(MembershipRole.OWNER)
+                .build());
+        BusinessMembership firstOwnerMembership = membershipRepository
+                .findByMerchantAccountIdAndBusinessId(merchantAccount.getId(), business.getId())
+                .orElseThrow();
+
+        mockMvc.perform(patch("/api/businesses/{businessId}/members/{membershipId}",
+                        business.getId(), firstOwnerMembership.getId())
+                        .with(merchant()).with(csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"role\":\"MANAGER\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("MANAGER"));
+        mockMvc.perform(patch("/api/businesses/{businessId}/members/{membershipId}",
+                        business.getId(), firstOwnerMembership.getId())
+                        .with(user(secondOwner.getEmail())).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"active\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+        mockMvc.perform(patch("/api/businesses/{businessId}/members/{membershipId}",
+                        business.getId(), 999999)
+                        .with(user(secondOwner.getEmail())).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"role\":\"STAFF\"}"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/api/businesses/{id}/invitations", business.getId())
+                        .with(user(secondOwner.getEmail())).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"duplicate@shopwise.test\",\"role\":\"STAFF\"}"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/businesses/{id}/invitations", business.getId())
+                        .with(user(secondOwner.getEmail())).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"duplicate@shopwise.test\",\"role\":\"STAFF\"}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/businesses/{id}/invitations", business.getId())
+                        .with(user(secondOwner.getEmail())).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"second-owner@shopwise.test\",\"role\":\"STAFF\"}"))
+                .andExpect(status().isConflict());
+
+        MerchantInvitation invalidRegistration = saveInvitation(
+                "invalid-registration@shopwise.test",
+                LocalDateTime.now().plusHours(1)
+        );
+        mockMvc.perform(post("/api/merchant-invitations/{token}/accept", invalidRegistration.getToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        MerchantInvitation revoked = saveInvitation("revoked@shopwise.test", LocalDateTime.now().plusHours(1));
+        revoked.setStatus(InvitationStatus.REVOKED);
+        invitationRepository.save(revoked);
+        mockMvc.perform(post("/api/merchant-invitations/{id}/resend", revoked.getId())
+                        .with(user(secondOwner.getEmail())).with(csrf()))
+                .andExpect(status().isBadRequest());
+
+        assertThat(secondOwnerMembership.getRole()).isEqualTo(MembershipRole.OWNER);
     }
 
     @Test
