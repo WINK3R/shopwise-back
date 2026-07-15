@@ -52,6 +52,35 @@ docker compose -f docker-compose.yml up -d postgres
 L'API est alors disponible sur `http://localhost:8080`. Le contrat est dans
 [`docs/openapi.yaml`](docs/openapi.yaml).
 
+## Base de donnees et donnees de test
+
+Le schema relationnel Mermaid est documente dans
+[`docs/database-schema.md`](docs/database-schema.md). Les scripts PostgreSQL sont
+executes automatiquement, dans cet ordre, lors de la creation d'un volume Docker
+vierge :
+
+1. `database/01-schema.sql` cree la structure et les contraintes ;
+2. `database/02-seed.sql` ajoute deux commerces et des donnees couvrant les
+   utilisateurs, clients, services, rendez-vous et comptes de fidelite.
+
+Tous les comptes de demonstration utilisent le mot de passe `Shopwise123!` :
+
+| Compte | Profil |
+| --- | --- |
+| `owner@shopwise.local` | OWNER de Chez Marie |
+| `manager@shopwise.local` | MANAGER de Chez Marie |
+| `staff@shopwise.local` | STAFF de Chez Marie |
+| `owner.zen@shopwise.local` | OWNER de Studio Zen |
+| `alice.martin@example.com` | Compte client |
+| `nina.roux@example.com` | Compte client |
+
+Les scripts d'initialisation PostgreSQL ne s'executent que lors de la creation du
+volume. Pour injecter uniquement les donnees dans une base existante :
+
+```bash
+psql -h localhost -p 5434 -U shopwise -d shopwise -f database/02-seed.sql
+```
+
 ## Tests et couverture
 
 La commande suivante compile le projet, execute tous les tests et genere JaCoCo :

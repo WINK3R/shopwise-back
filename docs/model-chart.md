@@ -99,16 +99,6 @@ class LoyaltyTransaction {
   +LocalDateTime transactionDate
 }
 
-class Merchant {
-  <<deprecated>>
-  +Long id
-  +String firstName
-  +String lastName
-  +String email UK
-  +String role
-  +Boolean active
-}
-
 class MembershipRole {
   <<enumeration>>
   OWNER
@@ -162,8 +152,6 @@ Appointment --> AppointmentStatus : status
 LoyaltyAccount "1" --> "0..*" LoyaltyTransaction : transactions
 Appointment "0..1" --> "0..1" LoyaltyTransaction : generates
 LoyaltyTransaction --> TransactionType : type
-
-Business "1" --> "0..*" Merchant : legacy merchants
 ```
 
 ## Contraintes metier representees
@@ -177,4 +165,3 @@ Business "1" --> "0..*" Merchant : legacy merchants
 - Un client peut avoir au maximum un `CustomerAccount` et un `LoyaltyAccount`.
 - Un rendez-vous peut generer au maximum une `LoyaltyTransaction`.
 - Chaque nouveau commerce recoit les trois prestations par defaut configurees par le backend.
-- `Merchant` correspond a la table et aux endpoints `/api/merchants` deprecies.
